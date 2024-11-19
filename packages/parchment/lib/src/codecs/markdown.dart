@@ -1,15 +1,20 @@
 import 'dart:convert';
 
-import 'package:parchment_delta/parchment_delta.dart';
-
-import '../document.dart';
-import '../document/attributes.dart';
-import '../document/block.dart';
-import '../document/leaf.dart';
-import '../document/line.dart';
+import '../../parchment.dart';
 
 class ParchmentMarkdownCodec extends Codec<ParchmentDocument, String> {
-  const ParchmentMarkdownCodec();
+  const ParchmentMarkdownCodec({this.strictEncoding = true});
+
+  /// Whether to strictly stick to the Markdown syntax during the encoding.
+  ///
+  /// If this option is enabled, during the encoding, if attributes that are
+  /// not natively supported by the Markdown syntax exist, an exception will be
+  /// thrown. Otherwise, they will be converted in the best way possible
+  /// (for example with HTML tags, plain text or placeholders).
+  ///
+  /// Currently supported attributes:
+  ///   - Underline with `<u>...</u>`
+  final bool strictEncoding;
 
   @override
   Converter<String, ParchmentDocument> get decoder =>
@@ -17,7 +22,7 @@ class ParchmentMarkdownCodec extends Codec<ParchmentDocument, String> {
 
   @override
   Converter<ParchmentDocument, String> get encoder =>
-      _ParchmentMarkdownEncoder();
+      _ParchmentMarkdownEncoder(strict: strictEncoding);
 }
 
 class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
@@ -41,6 +46,7 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
   static final _clRegExp = RegExp(r'^( *)- +\[( |x|X)\] +(.*)');
   static final _bqRegExp = RegExp(r'^> *(.*)');
   static final _codeRegExpTag = RegExp(r'^( *)```');
+  static final _hrRegExp = RegExp(r'^( *)(?:[-*_]){3,}\s*$');
 
   bool _inBlockStack = false;
 
@@ -62,6 +68,9 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
       return;
     }
 
+    if (_handleHorizontalRule(line, delta)) {
+      return;
+    }
     if (_handleBlockQuote(line, delta, style)) {
       return;
     }
@@ -351,9 +360,31 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
 
     return start;
   }
+
+  bool _handleHorizontalRule(String line, Delta delta) {
+    final match = _hrRegExp.matchAsPrefix(line);
+    if (match != null) {
+      // If delta is not empty and doesn't end with newline, add one
+      if (!delta.isEmpty && !delta.last.data.toString().endsWith('\n')) {
+        delta.insert('\n');
+      }
+
+      // Insert the horizontal rule as a block embed with its own line
+      delta
+        ..insert(BlockEmbed.horizontalRule.toJson())
+        ..insert('\n');
+
+      return true;
+    }
+    return false;
+  }
 }
 
 class _ParchmentMarkdownEncoder extends Converter<ParchmentDocument, String> {
+  const _ParchmentMarkdownEncoder({required this.strict});
+
+  final bool strict;
+
   static final simpleBlocks = <ParchmentAttribute, String>{
     ParchmentAttribute.bq: '> ',
     ParchmentAttribute.ul: '* ',
@@ -403,7 +434,16 @@ class _ParchmentMarkdownEncoder extends Converter<ParchmentDocument, String> {
     ParchmentAttribute? currentBlockAttribute;
 
     void handleLine(LineNode node) {
-      if (node.hasBlockEmbed) return;
+      if (node.hasBlockEmbed) {
+        if ((node.children.single as EmbedNode).value ==
+            BlockEmbed.horizontalRule) {
+          _writeHorizontalLineTag(buffer);
+        } else {
+          buffer.write('[object]');
+        }
+
+        return;
+      }
 
       for (final attr in node.style.lineAttributes) {
         if (attr.key == ParchmentAttribute.block.key) {
@@ -508,8 +548,12 @@ class _ParchmentMarkdownEncoder extends Converter<ParchmentDocument, String> {
       // no-op already handled in handleBlock
     } else if (attribute?.key == ParchmentAttribute.indent.key) {
       // no-op already handled in handleBlock
-    } else {
+    } else if (!strict && attribute?.key == ParchmentAttribute.underline.key) {
+      _writeUnderlineTag(buffer, close: close);
+    } else if (strict) {
       throw ArgumentError('Cannot handle $attribute');
+    } else {
+      _writeObjectTag(buffer);
     }
   }
 
@@ -521,6 +565,14 @@ class _ParchmentMarkdownEncoder extends Converter<ParchmentDocument, String> {
     buffer.write('_');
   }
 
+  void _writeUnderlineTag(StringBuffer buffer, {bool close = false}) {
+    if (close) {
+      buffer.write('</u>');
+    } else {
+      buffer.write('<u>');
+    }
+  }
+
   void _writeInlineCodeTag(StringBuffer buffer) {
     buffer.write('`');
   }
@@ -529,8 +581,11 @@ class _ParchmentMarkdownEncoder extends Converter<ParchmentDocument, String> {
     buffer.write('~~');
   }
 
-  void _writeLinkTag(StringBuffer buffer, ParchmentAttribute<String> link,
-      {bool close = false}) {
+  void _writeLinkTag(
+    StringBuffer buffer,
+    ParchmentAttribute<String> link, {
+    bool close = false,
+  }) {
     if (close) {
       buffer.write('](${link.value})');
     } else {
@@ -559,5 +614,19 @@ class _ParchmentMarkdownEncoder extends Converter<ParchmentDocument, String> {
         buffer.write(tag);
       }
     }
+  }
+
+  void _writeHorizontalLineTag(StringBuffer buffer) {
+    // Add newline before if buffer doesn't end with one
+    if (buffer.isNotEmpty && !buffer.toString().endsWith('\n')) {
+      buffer.write('\n');
+    }
+    buffer.write('---');
+    // Add newline after
+    buffer.write('\n');
+  }
+
+  void _writeObjectTag(StringBuffer buffer) {
+    buffer.write('[object]');
   }
 }

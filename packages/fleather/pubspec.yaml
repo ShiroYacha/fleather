@@ -26,7 +26,9 @@ dependencies:
     sdk: flutter
   collection: ^1.18.0
   parchment_delta: ^1.0.0
-  parchment: ^1.19.0
+  # parchment: ^1.19.0
+  parchment:
+    path: ../parchment
   intl: ^0.19.0
 
 dependency_overrides:
