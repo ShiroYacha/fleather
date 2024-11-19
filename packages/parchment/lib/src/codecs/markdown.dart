@@ -27,6 +27,7 @@ class ParchmentMarkdownCodec extends Codec<ParchmentDocument, String> {
 
 class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
   static final _headingRegExp = RegExp(r'(#+) *(.+)');
+  static final _hashtagRegExp = RegExp(r'#[\w]+');
   static final _styleRegExp = RegExp(
     // italic then bold
     r'(([*_])(\*{2}|_{2})(?<italic_bold_text>.*?[^ \3\2])\3\2)|'
@@ -235,6 +236,11 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
     }
 
     if (span.isNotEmpty) {
+      start = _handleHashtags(span, delta);
+      span = span.substring(start);
+    }
+
+    if (span.isNotEmpty) {
       if (addNewLine) {
         delta.insert('$span\n', outerStyle?.toJson());
       } else {
@@ -361,6 +367,25 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
     return start;
   }
 
+  int _handleHashtags(String span, Delta delta) {
+    var start = 0;
+
+    final matches = _hashtagRegExp.allMatches(span);
+    for (final match in matches) {
+      if (match.start > start) {
+        delta.insert(span.substring(start, match.start));
+      }
+
+      final hashtag = match.group(0)!;
+      final hashtagEmbed = SpanEmbed('hashtag', data: {'text': hashtag});
+      delta.insert(hashtagEmbed.toJson());
+
+      start = match.end;
+    }
+
+    return start;
+  }
+
   bool _handleHorizontalRule(String line, Delta delta) {
     final match = _hrRegExp.matchAsPrefix(line);
     if (match != null) {
@@ -441,7 +466,6 @@ class _ParchmentMarkdownEncoder extends Converter<ParchmentDocument, String> {
         } else {
           buffer.write('[object]');
         }
-
         return;
       }
 
@@ -458,9 +482,13 @@ class _ParchmentMarkdownEncoder extends Converter<ParchmentDocument, String> {
         }
       }
 
-      for (final textNode in node.children) {
-        handleText(lineBuffer, textNode as TextNode, currentInlineStyle);
-        currentInlineStyle = textNode.style;
+      for (final child in node.children) {
+        if (child is TextNode) {
+          handleText(lineBuffer, child, currentInlineStyle);
+          currentInlineStyle = child.style;
+        } else if (child is EmbedNode && child.value is SpanEmbed) {
+          lineBuffer.write(child.value.data['text']);
+        }
       }
 
       handleText(lineBuffer, TextNode(), currentInlineStyle);

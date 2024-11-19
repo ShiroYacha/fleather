@@ -18,11 +18,14 @@ import 'node.dart';
 final class LineNode extends ContainerNode<LeafNode> with StyledNode {
   /// Returns `true` if this line contains a block embedded object.
   bool get hasBlockEmbed {
-    if (childCount == 1 && children.single is EmbedNode) {
-      return !(children.single as EmbedNode).value.inline;
+    for (final child in children) {
+      if (child is EmbedNode && !child.value.inline) {
+        // If we find a block embed, ensure it's the only child
+        assert(
+            childCount == 1, 'Block embeds must be the only child in a line');
+        return true;
+      }
     }
-    assert(children.every((child) =>
-        child is TextNode || (child is EmbedNode && child.value.inline)));
     return false;
   }
 
@@ -337,6 +340,11 @@ final class LineNode extends ContainerNode<LeafNode> with StyledNode {
     if (data is String) {
       assert(data.contains('\n') == false);
       if (data.isEmpty) return;
+    }
+
+    // Check if we're trying to insert a block embed into a line with other content
+    if (data is EmbeddableObject && !data.inline && !isEmpty) {
+      throw ArgumentError('Block embeds must occupy their own line');
     }
 
     if (isEmpty) {
