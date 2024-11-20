@@ -144,7 +144,8 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
     }
     final match = _olRegExp.matchAsPrefix(line);
     final span = match?.group(2);
-    final indent = ((match?.group(1)?.length ?? 0) / 2).floor();
+    final indentSpaces = match?.group(1)?.length ?? 0;
+    final indent = (indentSpaces / 2).floor(); // Convert spaces to indent level
     if (span != null) {
       _handleSpan(span, delta, false, style);
       ParchmentStyle blockStyle = ParchmentStyle().put(ParchmentAttribute.ol);
@@ -164,10 +165,17 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
       return false;
     }
 
-    final newStyle = (style ?? ParchmentStyle()).put(ParchmentAttribute.ul);
-
     final match = _ulRegExp.matchAsPrefix(line);
     final span = match?.group(2);
+    final indentSpaces = match?.group(1)?.length ?? 0;
+    final indent = (indentSpaces / 2).floor(); // Convert spaces to indent level
+
+    ParchmentStyle newStyle =
+        (style ?? ParchmentStyle()).put(ParchmentAttribute.ul);
+    if (indent > 0) {
+      newStyle = newStyle.put(ParchmentAttribute.indent.withLevel(indent));
+    }
+
     if (span != null) {
       _handleSpan(span, delta, false,
           ParchmentStyle().putAll(newStyle.inlineAttributes));
@@ -184,15 +192,21 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
       return false;
     }
 
-    ParchmentStyle newStyle =
-        (style ?? ParchmentStyle()).put(ParchmentAttribute.cl);
-
     final match = _clRegExp.matchAsPrefix(line);
     final span = match?.group(3);
+    final indentSpaces = match?.group(1)?.length ?? 0;
+    final indent = (indentSpaces / 2).floor(); // Convert spaces to indent level
     final isChecked = match?.group(2) != ' ';
+
+    ParchmentStyle newStyle =
+        (style ?? ParchmentStyle()).put(ParchmentAttribute.cl);
+    if (indent > 0) {
+      newStyle = newStyle.put(ParchmentAttribute.indent.withLevel(indent));
+    }
     if (isChecked) {
       newStyle = newStyle.put(ParchmentAttribute.checked);
     }
+
     if (span != null) {
       _handleSpan(span, delta, false,
           ParchmentStyle().putAll(newStyle.inlineAttributes));
