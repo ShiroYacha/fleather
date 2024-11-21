@@ -220,8 +220,12 @@ class EditableTextBlock extends StatelessWidget {
       } else if (block == ParchmentAttribute.block.numberList ||
           block == ParchmentAttribute.block.bulletList) {
         lineSpacing = theme.lists.lineSpacing;
-      } else if (block == ParchmentAttribute.block.code ||
-          block == ParchmentAttribute.block.code) {
+      } else if (block == ParchmentAttribute.block.checkList) {
+        lineSpacing = VerticalSpacing(
+          top: theme.lists.lineSpacing.top + 2.0,
+          bottom: theme.lists.lineSpacing.bottom + 2.0,
+        );
+      } else if (block == ParchmentAttribute.block.code) {
         lineSpacing = theme.lists.lineSpacing;
       }
       top = lineSpacing?.top;
@@ -362,7 +366,8 @@ class _CheckboxPoint extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       alignment: AlignmentDirectional.topEnd,
-      padding: const EdgeInsetsDirectional.only(top: 2.0, end: 12.0),
+      padding:
+          const EdgeInsetsDirectional.only(top: 4.0, bottom: 4.0, end: 12.0),
       child: FleatherCheckbox(
         value: value,
         onChanged: enabled ? (_) => onChanged(!value) : null,
