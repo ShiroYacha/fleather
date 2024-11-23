@@ -3,7 +3,10 @@ import 'dart:convert';
 import '../../parchment.dart';
 
 class ParchmentMarkdownCodec extends Codec<ParchmentDocument, String> {
-  const ParchmentMarkdownCodec({this.strictEncoding = true});
+  const ParchmentMarkdownCodec({
+    this.strictEncoding = true,
+    this.referenceValidator,
+  });
 
   /// Whether to strictly stick to the Markdown syntax during the encoding.
   ///
@@ -16,9 +19,11 @@ class ParchmentMarkdownCodec extends Codec<ParchmentDocument, String> {
   ///   - Underline with `<u>...</u>`
   final bool strictEncoding;
 
+  final bool Function(String)? referenceValidator;
+
   @override
   Converter<String, ParchmentDocument> get decoder =>
-      _ParchmentMarkdownDecoder();
+      _ParchmentMarkdownDecoder(referenceValidator: referenceValidator);
 
   @override
   Converter<ParchmentDocument, String> get encoder =>
@@ -26,8 +31,12 @@ class ParchmentMarkdownCodec extends Codec<ParchmentDocument, String> {
 }
 
 class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
+  _ParchmentMarkdownDecoder({this.referenceValidator});
+
+  final bool Function(String)? referenceValidator;
+
   static final _headingRegExp = RegExp(r'(#+) *(.+)');
-  static final _hashtagRegExp = RegExp(r'#[\w]+');
+  static final _hashtagRegExp = RegExp(r'#[^\s]+');
   static final _styleRegExp = RegExp(
     // italic then bold
     r'(([*_])(\*{2}|_{2})(?<italic_bold_text>.*?[^ \3\2])\3\2)|'
@@ -48,6 +57,7 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
   static final _bqRegExp = RegExp(r'^> *(.*)');
   static final _codeRegExpTag = RegExp(r'^( *)```');
   static final _hrRegExp = RegExp(r'^( *)(?:[-*_]){3,}\s*$');
+  static final _referenceRegExp = RegExp(r'@[^\s]+');
 
   bool _inBlockStack = false;
 
@@ -255,6 +265,11 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
     }
 
     if (span.isNotEmpty) {
+      start = _handleReferences(span, delta);
+      span = span.substring(start);
+    }
+
+    if (span.isNotEmpty) {
       if (addNewLine) {
         delta.insert('$span\n', outerStyle?.toJson());
       } else {
@@ -400,6 +415,29 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
     return start;
   }
 
+  int _handleReferences(String span, Delta delta) {
+    var start = 0;
+
+    final matches = _referenceRegExp.allMatches(span);
+    for (final match in matches) {
+      if (referenceValidator != null && !referenceValidator!(match.group(0)!)) {
+        continue;
+      }
+
+      if (match.start > start) {
+        delta.insert(span.substring(start, match.start));
+      }
+
+      final reference = match.group(0)!;
+      final referenceEmbed = SpanEmbed('reference', data: {'text': reference});
+      delta.insert(referenceEmbed.toJson());
+
+      start = match.end;
+    }
+
+    return start;
+  }
+
   bool _handleHorizontalRule(String line, Delta delta) {
     final match = _hrRegExp.matchAsPrefix(line);
     if (match != null) {
@@ -501,7 +539,9 @@ class _ParchmentMarkdownEncoder extends Converter<ParchmentDocument, String> {
           handleText(lineBuffer, child, currentInlineStyle);
           currentInlineStyle = child.style;
         } else if (child is EmbedNode && child.value is SpanEmbed) {
-          lineBuffer.write(child.value.data['text']);
+          // Handle both hashtags and references
+          final embedData = child.value.data['text'] as String;
+          lineBuffer.write(embedData);
         }
       }
 
