@@ -16,7 +16,7 @@ class CodeColor {
     return TextSpan(
       style: textStyle,
       children:
-          _convert(highlight.parse(source, language: 'java').nodes!, theme),
+          _convert(highlight.parse(source, language: 'yaml').nodes!, theme),
     );
   }
 

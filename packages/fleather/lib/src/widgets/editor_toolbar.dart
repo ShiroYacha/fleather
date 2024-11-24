@@ -967,10 +967,10 @@ class FleatherToolbar extends StatefulWidget implements PreferredSizeWidget {
           ),
         ),
         Visibility(
-            visible: !hideBoldButton &&
-                !hideItalicButton &&
-                !hideUnderLineButton &&
-                !hideStrikeThrough &&
+            visible: !hideBoldButton ||
+                !hideItalicButton ||
+                !hideUnderLineButton ||
+                !hideStrikeThrough ||
                 !hideInlineCode,
             child: VerticalDivider(
                 indent: 16, endIndent: 16, color: Colors.grey.shade400)),

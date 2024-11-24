@@ -131,7 +131,8 @@ class EditableTextBlock extends StatelessWidget {
     } else if (block == ParchmentAttribute.block.bulletList) {
       return _buildBulletPointForBulletList(theme, children);
     } else if (block == ParchmentAttribute.block.code) {
-      return _buildNumberPointsForCodeBlock(theme, children);
+      // return _buildNumberPointsForCodeBlock(theme, children);
+      return null;
     } else if (block == ParchmentAttribute.block.checkList) {
       return _buildCheckboxForCheckList(theme, children);
     } else {
@@ -157,18 +158,18 @@ class EditableTextBlock extends StatelessWidget {
                   theme.paragraph.style.copyWith(fontWeight: FontWeight.bold)))
           .toList();
 
-  List<Widget> _buildNumberPointsForCodeBlock(
-          FleatherThemeData theme, List<LineNode> children) =>
-      children
-          .mapIndexed((i, _) => _NumberPoint(
-                number: i + 1,
-                style: theme.code.style
-                    .copyWith(color: theme.code.style.color?.withOpacity(0.4)),
-                width: 32.0,
-                padding: 16.0,
-                withDot: false,
-              ))
-          .toList();
+  // List<Widget> _buildNumberPointsForCodeBlock(
+  //         FleatherThemeData theme, List<LineNode> children) =>
+  //     children
+  //         .mapIndexed((i, _) => _NumberPoint(
+  //               number: i + 1,
+  //               style: theme.code.style
+  //                   .copyWith(color: theme.code.style.color?.withOpacity(0.4)),
+  //               width: 32.0,
+  //               padding: 16.0,
+  //               withDot: false,
+  //             ))
+  //         .toList();
 
   List<Widget> _buildNumberPointsForNumberList(
       FleatherThemeData theme, List<LineNode> children) {
@@ -207,7 +208,9 @@ class EditableTextBlock extends StatelessWidget {
         line.style.get(ParchmentAttribute.indent)?.value ?? 0;
     var extraIndent = indentationLevel * 16;
 
-    if (block == ParchmentAttribute.block.quote) {
+    if (block == ParchmentAttribute.block.code) {
+      return extraIndent + 16.0;
+    } else if (block == ParchmentAttribute.block.quote) {
       return extraIndent + 16.0;
     } else {
       return extraIndent + 32.0;
