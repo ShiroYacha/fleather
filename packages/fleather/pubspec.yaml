@@ -30,6 +30,7 @@ dependencies:
   parchment:
     path: ../parchment
   intl: ^0.19.0
+  highlight: ^0.7.0
 
 dependency_overrides:
   parchment:
