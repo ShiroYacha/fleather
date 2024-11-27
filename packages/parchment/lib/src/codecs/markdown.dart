@@ -254,26 +254,83 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
     var start = _handleStyles(span, delta, outerStyle);
     span = span.substring(start);
 
-    if (span.isNotEmpty) {
-      start = _handleLinks(span, delta, outerStyle);
-      span = span.substring(start);
+    // Create a list to store all matches with their positions
+    final allMatches = <_Match>[];
+
+    // Collect all link matches
+    _linkRegExp.allMatches(span).forEach((match) {
+      allMatches.add(_Match(
+        match.start,
+        match.end,
+        match.group(0)!,
+        type: _MatchType.link,
+        groups: [match.group(1)!, match.group(2)!],
+      ));
+    });
+
+    // Collect all hashtag matches
+    _hashtagRegExp.allMatches(span).forEach((match) {
+      allMatches.add(_Match(
+        match.start,
+        match.end,
+        match.group(0)!,
+        type: _MatchType.hashtag,
+      ));
+    });
+
+    // Collect all reference matches
+    _referenceRegExp.allMatches(span).forEach((match) {
+      if (referenceValidator?.call(match.group(0)!) ?? true) {
+        allMatches.add(_Match(
+          match.start,
+          match.end,
+          match.group(0)!,
+          type: _MatchType.reference,
+        ));
+      }
+    });
+
+    // Sort matches by start position
+    allMatches.sort((a, b) => a.start.compareTo(b.start));
+
+    // Process all matches in order
+    var currentPos = 0;
+    for (final match in allMatches) {
+      // Insert any text before the match
+      if (match.start > currentPos) {
+        delta.insert(
+            span.substring(currentPos, match.start), outerStyle?.toJson());
+      }
+
+      // Handle the match based on its type
+      switch (match.type) {
+        case _MatchType.link:
+          final text = match.groups![0];
+          final href = match.groups![1];
+          final linkStyle = (outerStyle ?? ParchmentStyle())
+              .put(ParchmentAttribute.link.fromString(href));
+          _handleSpan(text, delta, false, linkStyle);
+          break;
+        case _MatchType.hashtag:
+          final hashtagEmbed = SpanEmbed('hashtag', data: {'text': match.text});
+          delta.insert(hashtagEmbed.toJson());
+          break;
+        case _MatchType.reference:
+          final referenceEmbed =
+              SpanEmbed('reference', data: {'text': match.text});
+          delta.insert(referenceEmbed.toJson());
+          break;
+      }
+
+      currentPos = match.end;
     }
 
-    if (span.isNotEmpty) {
-      start = _handleHashtags(span, delta);
-      span = span.substring(start);
-    }
-
-    if (span.isNotEmpty) {
-      start = _handleReferences(span, delta);
-      span = span.substring(start);
-    }
-
-    if (span.isNotEmpty) {
+    // Insert any remaining text
+    if (currentPos < span.length) {
       if (addNewLine) {
-        delta.insert('$span\n', outerStyle?.toJson());
+        delta.insert('${span.substring(currentPos)}\n', outerStyle?.toJson());
       } else {
-        delta.insert(span, outerStyle?.toJson());
+        delta.insert(span.substring(currentPos), outerStyle?.toJson());
       }
     } else if (addNewLine) {
       delta.insert('\n', outerStyle?.toJson());
@@ -711,4 +768,22 @@ class _ParchmentMarkdownEncoder extends Converter<ParchmentDocument, String> {
   void _writeObjectTag(StringBuffer buffer) {
     buffer.write('[object]');
   }
+}
+
+enum _MatchType { link, hashtag, reference }
+
+class _Match {
+  final int start;
+  final int end;
+  final String text;
+  final _MatchType type;
+  final List<String>? groups;
+
+  _Match(
+    this.start,
+    this.end,
+    this.text, {
+    required this.type,
+    this.groups,
+  });
 }
