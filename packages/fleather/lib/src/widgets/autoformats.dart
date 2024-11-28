@@ -237,6 +237,9 @@ class MarkdownLineShortcuts extends AutoFormat {
     '#': ParchmentAttribute.h1,
     '##': ParchmentAttribute.h2,
     '###': ParchmentAttribute.h3,
+    '####': ParchmentAttribute.h4,
+    '#####': ParchmentAttribute.h5,
+    '######': ParchmentAttribute.h6,
   };
 
   const MarkdownLineShortcuts();
