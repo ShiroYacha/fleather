@@ -320,6 +320,13 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
               SpanEmbed('reference', data: {'text': match.text});
           delta.insert(referenceEmbed.toJson());
           break;
+        case _MatchType.style:
+          final text = match.groups![0];
+          final styleTag = match.groups![1];
+          var newStyle = _fromStyleTag(styleTag);
+          if (outerStyle != null) {
+            newStyle = newStyle.mergeAll(outerStyle);
+          }
       }
 
       currentPos = match.end;
@@ -338,35 +345,18 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
   }
 
   int _handleStyles(String span, Delta delta, ParchmentStyle? outerStyle) {
-    var start = 0;
-
-    // `**some code**`
-    //  does not translate to
-    // <code><strong>some code</code></strong>
-    //  but to
-    // <code>**code**</code>
+    // Don't process styles within inline code
     if (outerStyle?.contains(ParchmentAttribute.inlineCode) ?? false) {
-      return start;
+      return 0;
     }
 
-    final matches = _styleRegExp.allMatches(span);
-    for (final match in matches) {
-      if (match.start > start) {
-        if (span.substring(match.start - 1, match.start) == '[') {
-          delta.insert(
-              span.substring(start, match.start - 1), outerStyle?.toJson());
-          start = match.start -
-              1 +
-              _handleLinks(span.substring(match.start - 1), delta, outerStyle);
-          continue;
-        } else {
-          delta.insert(
-              span.substring(start, match.start), outerStyle?.toJson());
-        }
-      }
+    // Create a list to store all matches with their positions
+    final allMatches = <_Match>[];
 
-      final String text;
-      final String styleTag;
+    // Collect all style matches
+    _styleRegExp.allMatches(span).forEach((match) {
+      String text;
+      String styleTag;
       if (match.namedGroup('italic_bold_text') != null) {
         text = match.namedGroup('italic_bold_text')!;
         styleTag = '${match.group(2)}${match.group(3)}';
@@ -384,17 +374,66 @@ class _ParchmentMarkdownDecoder extends Converter<String, ParchmentDocument> {
         text = match.namedGroup('inline_code_text')!;
         styleTag = '`';
       }
-      var newStyle = _fromStyleTag(styleTag);
 
-      if (outerStyle != null) {
-        newStyle = newStyle.mergeAll(outerStyle);
+      allMatches.add(_Match(
+        match.start,
+        match.end,
+        match.group(0)!,
+        type: _MatchType.style,
+        groups: [text, styleTag],
+      ));
+    });
+
+    // Collect all link matches
+    _linkRegExp.allMatches(span).forEach((match) {
+      allMatches.add(_Match(
+        match.start,
+        match.end,
+        match.group(0)!,
+        type: _MatchType.link,
+        groups: [match.group(1)!, match.group(2)!],
+      ));
+    });
+
+    // Sort matches by start position
+    allMatches.sort((a, b) => a.start.compareTo(b.start));
+
+    // Process all matches in order
+    var currentPos = 0;
+    for (final match in allMatches) {
+      // Insert any text before the match
+      if (match.start > currentPos) {
+        delta.insert(
+            span.substring(currentPos, match.start), outerStyle?.toJson());
       }
 
-      _handleSpan(text, delta, false, newStyle);
-      start = match.end;
+      // Handle the match based on its type
+      switch (match.type) {
+        case _MatchType.style:
+          final text = match.groups![0];
+          final styleTag = match.groups![1];
+          var newStyle = _fromStyleTag(styleTag);
+          if (outerStyle != null) {
+            newStyle = newStyle.mergeAll(outerStyle);
+          }
+          _handleSpan(text, delta, false, newStyle);
+          break;
+        case _MatchType.link:
+          final text = match.groups![0];
+          final href = match.groups![1];
+          final linkStyle = (outerStyle ?? ParchmentStyle())
+              .put(ParchmentAttribute.link.fromString(href));
+          _handleSpan(text, delta, false, linkStyle);
+          break;
+        default:
+          // This shouldn't happen as we only collect style and link matches
+          break;
+      }
+
+      currentPos = match.end;
     }
 
-    return start;
+    return currentPos;
   }
 
   ParchmentStyle _fromStyleTag(String styleTag) {
@@ -770,7 +809,7 @@ class _ParchmentMarkdownEncoder extends Converter<ParchmentDocument, String> {
   }
 }
 
-enum _MatchType { link, hashtag, reference }
+enum _MatchType { link, hashtag, reference, style }
 
 class _Match {
   final int start;
